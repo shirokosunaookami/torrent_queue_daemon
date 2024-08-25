@@ -396,37 +396,24 @@ class TorrentManager:
 
                     # 假设允许的时间差为60秒（1分钟）
                     if abs(current_timestamp - request_timestamp) >= 60:
-                        web.json_response({'status': 'error', 'message': 'Outdated Signature'}, status=500, headers={'Access-Control-Allow-Origin': '*'})
-                        return
+                        return web.json_response({"Code":500,"Msg":"Outdated Signature","Data":""},  headers={'Access-Control-Allow-Origin': '*'})
                 else:
-                    web.json_response({'status': 'error', 'message': 'Wrong Signature'}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+                    return web.json_response({"Code":500,"Msg":"Wrong Signature","Data":""},  headers={'Access-Control-Allow-Origin': '*'})
         except Exception as e:
             logging.error(f"add_torrent Internal server error: {e}")
-            return web.json_response({
-                'status': 'error',
-                'message': "Please Contract Administrator"
-            }, status=500, headers={'Access-Control-Allow-Origin': '*'})
+            return web.json_response({"Code":500,"Msg":"Please Contract Administrator","Data":""},  headers={'Access-Control-Allow-Origin': '*'})
         try:
             if not torrent_link and not torrent_bytesio:
-                return web.json_response({
-                    'status': 'error',
-                    'action': 'ADDTORRENT',
-                    'message': 'torrent_link or torrent_bytesio is required'
-                }, status=400, headers={'Access-Control-Allow-Origin': '*'})
+                return web.json_response({"Code":500,"Msg":"torrent_link or torrent_bytesio is required","Data":"ADDTORRENT"}
+                                         ,  headers={'Access-Control-Allow-Origin': '*'})
 
             current_torrent = Torrent(torrent_link, torrent_bytesio, self.qb_torrents_info, encode_base64=True)
             if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) and not data.get('forceadd'):
-                return web.json_response({
-                    'status': 'error',
-                    'action': 'ADDTORRENT',
-                    'message': 'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.'
-                }, status=400, headers={'Access-Control-Allow-Origin': '*'})
+                return web.json_response({"Code":500,"Msg":'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.',"Data":"ADDTORRENT"}
+                                         ,  headers={'Access-Control-Allow-Origin': '*'})
             if current_torrent.is_in_client:
-                return web.json_response({
-                    'status': 'error',
-                    'action': 'ADDTORRENT',
-                    'message': 'Torrent Already in qBittorrent.'
-                }, status=400, headers={'Access-Control-Allow-Origin': '*'})
+                return web.json_response({'Code':500,'Msg':'Torrent Already in qBittorrent.','Data':'ADDTORRENT'}
+                                         ,  headers={'Access-Control-Allow-Origin': '*'})
             table_name = f"torrent_{current_torrent.md5}"
 
             # Check if the torrent is already in the queue
@@ -482,41 +469,35 @@ class TorrentManager:
                 )
 
                 self.conn.commit()
-                return web.json_response({
-                    'status': 'success',
+                return web.json_response({'Code':200,'Msg':'成功','Data':{
                     'action': 'ADDTORRENT',
                     'torrent_name': current_torrent.name,
                     'tracker': current_torrent.announce
-                }, headers={'Access-Control-Allow-Origin': '*'})
+                }}, headers={'Access-Control-Allow-Origin': '*'})
             else:
-                return web.json_response({
-                    'status': 'error',
+                return web.json_response({'Code':200,'Msg':'成功','Data':{
                     'action': 'ADDTORRENT',
                     'torrent_name': current_torrent.name,
                     'tracker': current_torrent.announce,
                     'message': 'Torrent Already in Queue.'
-                }, headers={'Access-Control-Allow-Origin': '*'})
+                }}, headers={'Access-Control-Allow-Origin': '*'})
 
         except Exception as e:
             logging.error(f"Error adding torrent: {str(e)}")
-            return web.json_response({
-                'status': 'error',
-                'action': 'ADDTORRENT',
-                'message': str(e)
-            }, status=500, headers={'Access-Control-Allow-Origin': '*'})
+            return web.json_response({'Code':500,'Msg':str(e),'Data':''},  headers={'Access-Control-Allow-Origin': '*'})
     async def login(self, request):
         # Data为apiKey
-        return web.json_response({"Code":200,"Msg":"登陆成功","Data":"111sdsd"}, status=200,
+        return web.json_response({"Code":200,"Msg":"登陆成功","Data":"111sdsd"}, 
                           headers={'Access-Control-Allow-Origin': '*'})
 
     # 用于后面菜单权限控制，暂时用不上，直接空实现
     async def getRoute(self, request):
-        return web.json_response({"Code":200,"Msg":"","Data":[]}, status=200,
+        return web.json_response({"Code":200,"Msg":"","Data":[]}, 
                           headers={'Access-Control-Allow-Origin': '*'})
 
     # 用于后面菜单权限控制，暂时用不上，直接空实现
     async def getUser(self, request):
-        return web.json_response({"Code":200,"Msg":"","Data":{"name":"admin","role":["admin"]}}, status=200,
+        return web.json_response({"Code":200,"Msg":"","Data":{"name":"admin","role":["admin"]}}, 
                           headers={'Access-Control-Allow-Origin': '*'})
 
     # 获取待deploy种子列表
@@ -538,7 +519,7 @@ class TorrentManager:
     }
   ],"total": 200
   }
-}, status=200,
+}, 
                           headers={'Access-Control-Allow-Origin': '*'})
 
     async def del_torrent(self, request):
@@ -566,21 +547,21 @@ class TorrentManager:
 
                     # 假设允许的时间差为60秒（1分钟）
                     if abs(current_timestamp - request_timestamp) >= 60:
-                        web.json_response({'status': 'error', 'message': 'Outdated Signature'}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+                        web.json_response({'status': 'error', 'message': 'Outdated Signature'},  headers={'Access-Control-Allow-Origin': '*'})
                         return
                 else:
-                    web.json_response({'status': 'error', 'message': 'Wrong Signature'}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+                    web.json_response({'status': 'error', 'message': 'Wrong Signature'},  headers={'Access-Control-Allow-Origin': '*'})
         except Exception as e:
             logging.error(f"del_torrent Internal server error: {e}")
             return web.json_response({
                 'status': 'error',
                 'message': "Please Contract Administrator"
-            }, status=500, headers={'Access-Control-Allow-Origin': '*'})
+            },  headers={'Access-Control-Allow-Origin': '*'})
         try:
             if not any([torrent_link, torrent_bytesio, torrent_name, torrent_hash]):
                 return web.json_response(
                     {'status': 'error', 'action': 'DELTORRENT', 'message': 'No option provided, Bad Request'},
-                    status=400, headers={'Access-Control-Allow-Origin': '*'})
+                     headers={'Access-Control-Allow-Origin': '*'})
             torrent_hash = None
             if torrent_link or torrent_bytesio:
                 current_torrent = Torrent(torrent_link=torrent_link, torrent_bytesio=torrent_bytesio,
@@ -617,7 +598,7 @@ class TorrentManager:
                     torrent_hashes = torrent_hash
                 else:
                     return web.json_response(
-                        {'status': 'error', 'action': 'DELTORRENT', 'message': 'Torrent not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+                        {'status': 'error', 'action': 'DELTORRENT', 'message': 'Torrent not found'},  headers={'Access-Control-Allow-Origin': '*'})
 
                 if torrent_hashes:
                     self.qbittorrent.torrents_reannounce(torrent_hashes=torrent_hashes)
@@ -628,11 +609,11 @@ class TorrentManager:
                         {'status': 'success', 'message': f'del torrent {torrent_name or torrent_hash} success.'}, headers={'Access-Control-Allow-Origin': '*'})
             else:
                 return web.json_response(
-                    {'status': 'error', 'action': 'DELTORRENT', 'message': 'No torrent hash found'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+                    {'status': 'error', 'action': 'DELTORRENT', 'message': 'No torrent hash found'},  headers={'Access-Control-Allow-Origin': '*'})
 
         except Exception as e:
             logging.error(f"Error deleting torrent: {str(e)}")
-            return web.json_response({'status': 'error', 'action': 'DELTORRENT', 'message': str(e)}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+            return web.json_response({'status': 'error', 'action': 'DELTORRENT', 'message': str(e)},  headers={'Access-Control-Allow-Origin': '*'})
 
 class Torrent:
     def __init__(self, torrent_link=None, torrent_bytesio=None, qb_torrents_info=None, encode_base64=False):
