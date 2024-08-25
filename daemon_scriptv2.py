@@ -475,7 +475,7 @@ class TorrentManager:
                     'tracker': current_torrent.announce
                 }}, headers={'Access-Control-Allow-Origin': '*'})
             else:
-                return web.json_response({'Code':200,'Msg':'成功','Data':{
+                return web.json_response({'Code':500,'Msg':'成功','Data':{
                     'action': 'ADDTORRENT',
                     'torrent_name': current_torrent.name,
                     'tracker': current_torrent.announce,
