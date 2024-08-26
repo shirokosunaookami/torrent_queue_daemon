@@ -485,9 +485,17 @@ class TorrentManager:
             logging.error(f"Error adding torrent: {str(e)}")
             return web.json_response({'Code':500,'Msg':str(e),'Data':''},  headers={'Access-Control-Allow-Origin': '*'})
     async def login(self, request):
-        # Data为apiKey
-        return web.json_response({"Code":200,"Msg":"登陆成功","Data":"111sdsd"}, 
+        # Data为accessToken
+        data = await request.json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if username == 'admin' and password == '123456':
+            return web.json_response({"Code":200,"Msg":"登陆成功","Data":"accessToken"},
                           headers={'Access-Control-Allow-Origin': '*'})
+        else:
+            return web.json_response({"Code": 500, "Msg": "用户名或密码错误", "Data": ""},
+                                     headers={'Access-Control-Allow-Origin': '*'})
 
     # 用于后面菜单权限控制，暂时用不上，直接空实现
     async def getRoute(self, request):
