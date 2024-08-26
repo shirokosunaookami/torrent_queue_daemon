@@ -475,11 +475,10 @@ class TorrentManager:
                     'tracker': current_torrent.announce
                 }}, headers={'Access-Control-Allow-Origin': '*'})
             else:
-                return web.json_response({'Code':500,'Msg':'成功','Data':{
+                return web.json_response({'Code':500,'Msg':'Torrent Already in Queue.','Data':{
                     'action': 'ADDTORRENT',
                     'torrent_name': current_torrent.name,
                     'tracker': current_torrent.announce,
-                    'message': 'Torrent Already in Queue.'
                 }}, headers={'Access-Control-Allow-Origin': '*'})
 
         except Exception as e:
