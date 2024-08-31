@@ -11,7 +11,7 @@ httpapi_port = 8888
 
 torrent_overspeed_whitelist = [#超速白名单,在此列表中的种子将不会限速,可自由填写
     "tracker.pterclub.com",
-    "tracker1.leaves.red",
+    "tracker.leaves.red",
     "tracker2.leaves.red",
     "tracker3.leaves.red",
     "tracker.hdsky.me",
@@ -66,3 +66,8 @@ prevent_seed_time_tracker_list = [
     "tracker.pterclub.com",
 ] #一些站点会考核发种人的做种时间，属于此tracker的种子的活动时间在超过prevent_seed_time之后将不会被脚本暂停
 prevent_seed_time = 3600 #对在做种时间超过x秒之后并在上述列表的种子起效
+
+sleep_time = 60 # 脚本运行间隔时间（秒）
+exception_sleep_time = 120 # 异常时脚本运行间隔时间（秒）
+is_backup_torrent = True #是否备份种子,Ture时，发送种子的接口会备份到服务器目录
+upload_folder = 'uploads' #种子备份文件夹
