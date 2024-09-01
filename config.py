@@ -2,7 +2,6 @@
 qb_url = "" #qb地址，目前也只支持qb
 qb_username = ""  #qb账号
 qb_password = "" #qb密码
-#api_key = "aimwarenet"
 api_key = None
 httpapi_ip = "0.0.0.0"
 httpapi_port = 8888
