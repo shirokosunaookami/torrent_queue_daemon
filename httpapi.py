@@ -329,12 +329,6 @@ async def getTorrentList(self, request):
         table_name_mapping = {}
 
         for entry in queue_entries:
-            torrents_tmp = {}
-            torrents_list.append(torrents_tmp)
-
-            torrents_tmp["torrent_name"] = entry[0]
-            torrents_tmp["torrent_md5"] = entry[1]
-
             torrent_md5 = entry[1]
             table_name = f"torrent_{torrent_md5}"
 
@@ -345,31 +339,36 @@ async def getTorrentList(self, request):
                 continue
 
             torrent_table_queries.append(
-                f"SELECT torrent_byteio, fifoid, '{table_name}' as table_name, torrent_tracker FROM {table_name} WHERE ispushed = 0")
+                f"SELECT torrent_byteio, fifoid, '{table_name}' as table_name, torrent_tracker,ispushed FROM {table_name}")
             table_name_mapping[table_name] = torrent_md5
 
             if torrent_table_queries:
-                table_query = ' UNION ALL '.join(torrent_table_queries) + " ORDER BY fifoid ASC LIMIT 1"
+                table_query = ' UNION ALL '.join(torrent_table_queries) + " ORDER BY fifoid ASC"
                 self.cursor.execute(table_query)
-                result = self.cursor.fetchone()
+                result = self.cursor.fetchall()
 
-                if result:
-                    # torrents_tmp["torrent_byteio"] = result[0]
-                    torrents_tmp["fifoid"] = result[1]
-                    torrents_tmp["table_name"] = result[2]
-                    torrents_tmp["table_tracker"] = result[3]
+                for tmp in result:
+                    torrents_tmp = {}
+                    torrents_list.append(torrents_tmp)
+
+                    torrents_tmp["torrent_name"] = entry[0]
+                    torrents_tmp["torrent_md5"] = entry[1]
+                    torrents_tmp["fifoid"] = tmp[1]
+                    torrents_tmp["table_name"] = tmp[2]
+                    torrents_tmp["table_tracker"] = tmp[3]
+                    torrents_tmp["ispushed"] = tmp[4]
 
     except Exception as e:
         logging.error(f"Error deploying torrent: {e}")
         return web.json_response({
             "code": 500,
             "msg": "查询种子列表失败"
-        },headers={'Access-Control-Allow-Origin': '*'})
+        }, headers={'Access-Control-Allow-Origin': '*'})
     return web.json_response({
         "code": 200,
         "msg": "",
         "data": json.dumps(torrents_list)
-    },headers={'Access-Control-Allow-Origin': '*'})
+    }, headers={'Access-Control-Allow-Origin': '*'})
 
 async def del_torrent(self, request):
     try:
