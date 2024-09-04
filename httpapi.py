@@ -327,21 +327,22 @@ async def getTorrentList(self, request):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name like 'torrent_%'")
         tables = self.cursor.fetchall()
 
-        for table in tables:
-            torrent_table_queries.append(
-                f"SELECT torrent_byteio, fifoid, '{table[0]}' as table_name, torrent_tracker,ispushed FROM {table[0]}")
-            if torrent_table_queries:
-                table_query = ' UNION ALL '.join(torrent_table_queries)
+        if tables:
+            for table in tables:
+                torrent_table_queries.append(
+                    f"SELECT torrent_byteio, fifoid, '{table[0]}' as table_name, torrent_tracker,ispushed FROM {table[0]}")
+                if torrent_table_queries:
+                    table_query = ' UNION ALL '.join(torrent_table_queries)
 
-        table_query = "select torrent_name, torrent_tracker, fifoid, ispushed, isavailable, torrent_md5 , torrent_byteio, table_name from (" + table_query + ") a left join deployment_torrents_queue b on a.table_name = 'torrent_'||b.torrent_md5 ORDER BY ispushed,fifoid ASC"
-        # Fetch all available torrents
-        self.cursor.execute(table_query)
-        queue_entries = self.cursor.fetchall()
+            table_query = "select torrent_name, torrent_tracker, fifoid, ispushed, isavailable, torrent_md5 , torrent_byteio, table_name from (" + table_query + ") a left join deployment_torrents_queue b on a.table_name = 'torrent_'||b.torrent_md5 ORDER BY ispushed,fifoid ASC"
+            # Fetch all available torrents
+            self.cursor.execute(table_query)
+            queue_entries = self.cursor.fetchall()
 
-        # 将查询结果转换为字典列表:
-        for row in queue_entries:
-            rows.append({'torrent_name': row[0], 'torrent_tracker': row[1], 'fifoid': row[2], 'ispushed': row[3],
-                         'isavailable': row[4], 'torrent_md5': row[5], 'table_name': row[7]})
+            # 将查询结果转换为字典列表:
+            for row in queue_entries:
+                rows.append({'torrent_name': row[0], 'torrent_tracker': row[1], 'fifoid': row[2], 'ispushed': row[3],
+                             'isavailable': row[4], 'torrent_md5': row[5], 'table_name': row[7]})
 
     except Exception as e:
         logging.error(f"Error deploying torrent: {e}")
