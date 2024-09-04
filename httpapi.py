@@ -319,44 +319,29 @@ async def getInfo(self, request):
 # 获取待deploy种子列表
 async def getTorrentList(self, request):
     torrents_list = []
+    table_query = ""
+    torrent_table_queries = []
+    rows = []
+
     try:
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name like 'torrent_%'")
+        tables = self.cursor.fetchall()
+
+        for table in tables:
+            torrent_table_queries.append(
+                f"SELECT torrent_byteio, fifoid, '{table[0]}' as table_name, torrent_tracker,ispushed FROM {table[0]}")
+            if torrent_table_queries:
+                table_query = ' UNION ALL '.join(torrent_table_queries)
+
+        table_query = "select torrent_name, torrent_tracker, fifoid, ispushed, isavailable, torrent_md5 , torrent_byteio, table_name from (" + table_query + ") a left join deployment_torrents_queue b on a.table_name = 'torrent_'||b.torrent_md5 ORDER BY ispushed,fifoid ASC"
         # Fetch all available torrents
-        self.cursor.execute(
-            "SELECT torrent_name, torrent_md5 FROM deployment_torrents_queue")
+        self.cursor.execute(table_query)
         queue_entries = self.cursor.fetchall()
 
-        torrent_table_queries = []
-        table_name_mapping = {}
-
-        for entry in queue_entries:
-            torrent_md5 = entry[1]
-            table_name = f"torrent_{torrent_md5}"
-
-            # Check if the table exists before querying
-            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-            if not self.cursor.fetchone():
-                logging.warning(f"Table {table_name} does not exist. Skipping.")
-                continue
-
-            torrent_table_queries.append(
-                f"SELECT torrent_byteio, fifoid, '{table_name}' as table_name, torrent_tracker,ispushed FROM {table_name}")
-            table_name_mapping[table_name] = torrent_md5
-
-            if torrent_table_queries:
-                table_query = ' UNION ALL '.join(torrent_table_queries) + " ORDER BY fifoid ASC"
-                self.cursor.execute(table_query)
-                result = self.cursor.fetchall()
-
-                for tmp in result:
-                    torrents_tmp = {}
-                    torrents_list.append(torrents_tmp)
-
-                    torrents_tmp["torrent_name"] = entry[0]
-                    torrents_tmp["torrent_md5"] = entry[1]
-                    torrents_tmp["fifoid"] = tmp[1]
-                    torrents_tmp["table_name"] = tmp[2]
-                    torrents_tmp["table_tracker"] = tmp[3]
-                    torrents_tmp["ispushed"] = tmp[4]
+        # 将查询结果转换为字典列表:
+        for row in queue_entries:
+            rows.append({'torrent_name': row[0], 'torrent_tracker': row[1], 'fifoid': row[2], 'ispushed': row[3],
+                         'isavailable': row[4], 'torrent_md5': row[5], 'table_name': row[7]})
 
     except Exception as e:
         logging.error(f"Error deploying torrent: {e}")
@@ -367,7 +352,7 @@ async def getTorrentList(self, request):
     return web.json_response({
         "code": 200,
         "msg": "",
-        "data": json.dumps(torrents_list)
+        "data": json.dumps(rows)
     }, headers={'Access-Control-Allow-Origin': '*'})
 
 async def del_torrent(self, request):
