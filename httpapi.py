@@ -240,18 +240,19 @@ async def upload(self, request):
                     return web.json_response({'code': 500, 'msg': str(e), 'data': ''},
                                                 headers={'Access-Control-Allow-Origin': '*'})
 
+
 async def login(self, request):
     # Data为accessToken
     data = await request.json()
     username = data.get('username')
     password = data.get('password')
 
-    if username == 'admin' and password == '123456':
+    if username == config.qb_username and password == config.qb_password:
         return web.json_response({"code": 200, "msg": "登陆成功", "token": "accessToken"},
-                                    headers={'Access-Control-Allow-Origin': '*'})
+                                 headers={'Access-Control-Allow-Origin': '*'})
     else:
         return web.json_response({"code": 500, "msg": "用户名或密码错误", "data": ""},
-                                    headers={'Access-Control-Allow-Origin': '*'})
+                                 headers={'Access-Control-Allow-Origin': '*'})
 
 # 用于后面菜单权限控制，暂时用不上，直接空实现
 async def getRouters(self, request):
