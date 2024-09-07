@@ -242,7 +242,6 @@ async def upload(self, request):
 
 
 async def login(self, request):
-    # Data为accessToken
     data = await request.json()
     username = data.get('username')
     password = data.get('password')
@@ -251,7 +250,7 @@ async def login(self, request):
         return web.json_response({"code": 200, "msg": "登陆成功", "token": "accessToken"},
                                  headers={'Access-Control-Allow-Origin': '*'})
     else:
-        return web.json_response({"code": 500, "msg": "用户名或密码错误", "data": ""},
+        return web.json_response({"code": 500, "msg": "用户名或密码错误"},
                                  headers={'Access-Control-Allow-Origin': '*'})
 
 # 用于后面菜单权限控制，暂时用不上，直接空实现
