@@ -499,119 +499,228 @@ class TorrentManager:
             logging.error(f"Error adding torrent: {str(e)}")
             return web.json_response({'code': 500, 'msg': str(e), 'data': ''},
                                      headers={'Access-Control-Allow-Origin': '*'})
-
     async def upload(self, request):
-        # 获取表单数据
-        form = await request.post()
-        authorization = form.get('Authorization')
-        forceadd = (form.get('forceadd') == 'true')
-        isDonwnload = form.get('isDownload')
+        reader = await request.multipart()
+        while True:
+            part = await reader.next()
+            if part is None:
+                break
+            if part.name == 'file':
+                # 获取文件名
+                filename = part.filename
+                if not filename.endswith('.torrent'):
+                    return web.json_response({'code': 500, 'msg': 'Invalid file format. Only.torrent files are allowed.'},
+                                             headers={'Access-Control-Allow-Origin': '*'}, status=500)
 
-        file_field = form.get('file')
-        # 处理上传的文件
-        if file_field:
-            file_name = file_field.filename
-            # 获取文件名
-            if not file_name.endswith('.torrent'):
-                return web.json_response({'code': 500, 'msg': 'Invalid file format. Only.torrent files are allowed.'},
-                                         headers={'Access-Control-Allow-Origin': '*'}, status=500)
+                # 读取文件内容
+                contents = await part.read(decode=True)
 
-            file_path = os.path.join(config.upload_folder, file_name)
-            # 备份文件
-            if config.is_backup_torrent:
-                with open(file_path, 'wb') as f:
-                    contents = file_field.file.read()
-                    f.write(contents)
+                # 备份文件
+                if config.is_backup_torrent:
+                    with open(os.path.join('uploads', filename), 'wb') as f:
+                        f.write(contents)
 
-            with open(file_path, 'rb') as f:
-                try:
-                    torrent_bytes = f.read()
-                    torrent_bytesio = base64.b64encode(torrent_bytes).decode('utf-8')
+                with open(os.path.join('uploads', filename), 'rb') as f:
+                    try:
+                        torrent_bytes = f.read()
+                        torrent_bytesio = base64.b64encode(torrent_bytes).decode('utf-8')
 
-                    current_torrent = Torrent(None, torrent_bytesio, self.qb_torrents_info, encode_base64=True)
-                    if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) and not forceadd:
-                        return web.json_response({"code": 500,
-                                                  "msg": 'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.',
-                                                  "data": "ADDTORRENT"}
-                                                 , headers={'Access-Control-Allow-Origin': '*'},status=500)
-                    if current_torrent.is_in_client:
-                        return web.json_response(
-                            {'code': 500, 'msg': 'Torrent Already in qBittorrent.', 'data': 'ADDTORRENT'}
-                            , headers={'Access-Control-Allow-Origin': '*'},status=500)
-                    table_name = f"torrent_{current_torrent.md5}"
+                        current_torrent = Torrent(None, torrent_bytesio, self.qb_torrents_info, encode_base64=True)
+                        # if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) :
+                        #     return web.json_response({"code": 500,
+                        #                               "msg": 'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.',
+                        #                               "data": "ADDTORRENT"}
+                        #                              , headers={'Access-Control-Allow-Origin': '*'}, status=500)
+                        if current_torrent.is_in_client:
+                            return web.json_response(
+                                {'code': 500, 'msg': 'Torrent Already in qBittorrent.', 'data': 'ADDTORRENT'}
+                                , headers={'Access-Control-Allow-Origin': '*'}, status=500)
+                        table_name = f"torrent_{current_torrent.md5}"
 
-                    # Check if the torrent is already in the queue
-                    self.cursor.execute(
-                        "SELECT count(*) FROM deployment_torrents_queue WHERE torrent_name = ? AND torrent_md5 = ?",
-                        (current_torrent.name, current_torrent.md5)
-                    )
-                    result = self.cursor.fetchone()[0]
-
-                    if result > 1:
-                        raise ValueError(
-                            f"Unexpected Database Error: Multiple records found for this torrent. Count: {result}")
-
-                    if result == 0:
-                        # Insert into deployment_torrents_queue and create the table
+                        # Check if the torrent is already in the queue
                         self.cursor.execute(
-                            "INSERT INTO deployment_torrents_queue (torrent_name, torrent_md5, isavailable) VALUES (?, ?, ?)",
-                            (current_torrent.name, current_torrent.md5, False)
+                            "SELECT count(*) FROM deployment_torrents_queue WHERE torrent_name = ? AND torrent_md5 = ?",
+                            (current_torrent.name, current_torrent.md5)
                         )
+                        result = self.cursor.fetchone()[0]
 
-                        self.cursor.execute(f"""
-                            CREATE TABLE IF NOT EXISTS {table_name} (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                torrent_hash TEXT NOT NULL,
-                                torrent_byteio BLOB NOT NULL,
-                                torrent_tracker TEXT NOT NULL,
-                                ispushed BOOLEAN NOT NULL DEFAULT 0,
-                                fifoid INTEGER NOT NULL
+                        if result > 1:
+                            raise ValueError(
+                                f"Unexpected Database Error: Multiple records found for this torrent. Count: {result}")
+
+                        if result == 0:
+                            # Insert into deployment_torrents_queue and create the table
+                            self.cursor.execute(
+                                "INSERT INTO deployment_torrents_queue (torrent_name, torrent_md5, isavailable) VALUES (?, ?, ?)",
+                                (current_torrent.name, current_torrent.md5, False)
                             )
-                        """)
-                        is_new_torrent = True
-                    else:
-                        # Check if the torrent data is already in the specific table
-                        self.cursor.execute(
-                            f"SELECT count(*) FROM {table_name} WHERE torrent_hash = ?",
-                            (current_torrent.hash,)
-                        )
-                        is_new_torrent = self.cursor.fetchone()[0] == 0
 
-                    if is_new_torrent:
-                        self.cursor.execute("SELECT fifo_max FROM daemon_config WHERE id = 1 LIMIT 1")
-                        result = self.cursor.fetchone()
-                        if result:
-                            thisfifoid = result[0] + 1  # 自增1
+                            self.cursor.execute(f"""
+                                CREATE TABLE IF NOT EXISTS {table_name} (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    torrent_hash TEXT NOT NULL,
+                                    torrent_byteio BLOB NOT NULL,
+                                    torrent_tracker TEXT NOT NULL,
+                                    ispushed BOOLEAN NOT NULL DEFAULT 0,
+                                    fifoid INTEGER NOT NULL
+                                )
+                            """)
+                            is_new_torrent = True
+                        else:
+                            # Check if the torrent data is already in the specific table
+                            self.cursor.execute(
+                                f"SELECT count(*) FROM {table_name} WHERE torrent_hash = ?",
+                                (current_torrent.hash,)
+                            )
+                            is_new_torrent = self.cursor.fetchone()[0] == 0
+
+                        if is_new_torrent:
+                            self.cursor.execute("SELECT fifo_max FROM daemon_config WHERE id = 1 LIMIT 1")
+                            result = self.cursor.fetchone()
+                            if result:
+                                thisfifoid = result[0] + 1  # 自增1
+
+                                self.cursor.execute(
+                                    "UPDATE daemon_config SET fifo_max = ? WHERE fifo_max = ? and id = 1",
+                                    (thisfifoid, result[0]))
+                            else:
+                                thisfifoid = 1  # 如果没有找到记录，默认从1开始
 
                             self.cursor.execute(
-                                "UPDATE daemon_config SET fifo_max = ? WHERE fifo_max = ? and id = 1",
-                                (thisfifoid, result[0]))
+                                f"INSERT INTO {table_name} (torrent_hash, torrent_byteio, torrent_tracker, ispushed, fifoid) VALUES (?, ?, ?, ?, ?)",
+                                (current_torrent.hash, current_torrent.torrent, current_torrent.announce, False,
+                                 thisfifoid)
+                            )
+
+                            self.conn.commit()
+                            return web.json_response({'code': 200, 'msg': '成功', 'data': {
+                                'action': 'ADDTORRENT',
+                                'torrent_name': current_torrent.name,
+                                'tracker': current_torrent.announce
+                            }}, headers={'Access-Control-Allow-Origin': '*'})
                         else:
-                            thisfifoid = 1  # 如果没有找到记录，默认从1开始
+                            return web.json_response({'code': 500, 'msg': 'Torrent Already in Queue.', 'data': {
+                                'action': 'ADDTORRENT',
+                                'torrent_name': current_torrent.name,
+                                'tracker': current_torrent.announce,
+                            }}, headers={'Access-Control-Allow-Origin': '*'}, status=500)
 
-                        self.cursor.execute(
-                            f"INSERT INTO {table_name} (torrent_hash, torrent_byteio, torrent_tracker, ispushed, fifoid) VALUES (?, ?, ?, ?, ?)",
-                            (current_torrent.hash, current_torrent.torrent, current_torrent.announce, False,
-                             thisfifoid)
-                        )
-
-                        self.conn.commit()
-                        return web.json_response({'code': 200, 'msg': '成功', 'data': {
-                            'action': 'ADDTORRENT',
-                            'torrent_name': current_torrent.name,
-                            'tracker': current_torrent.announce
-                        }}, headers={'Access-Control-Allow-Origin': '*'})
-                    else:
-                        return web.json_response({'code': 500, 'msg': 'Torrent Already in Queue.', 'data': {
-                            'action': 'ADDTORRENT',
-                            'torrent_name': current_torrent.name,
-                            'tracker': current_torrent.announce,
-                        }}, headers={'Access-Control-Allow-Origin': '*'},status=500)
-
-                except Exception as e:
-                    logging.error(f"Error adding torrent: {str(e)}")
-                    return web.json_response({'code': 500, 'msg': str(e), 'data': ''},
-                                             headers={'Access-Control-Allow-Origin': '*'},status=500)
+                    except Exception as e:
+                        logging.error(f"Error adding torrent: {str(e)}")
+                        return web.json_response({'code': 500, 'msg': str(e), 'data': ''},
+                                                 headers={'Access-Control-Allow-Origin': '*'}, status=500)
+    # async def upload(self, request):
+    #     # 获取表单数据
+    #     form = await request.post()
+    #     authorization = form.get('Authorization')
+    #     forceadd = (form.get('forceadd') == 'true')
+    #     isDonwnload = form.get('isDownload')
+    #
+    #     file_field = form.get('file')
+    #     # 处理上传的文件
+    #     if file_field:
+    #         file_name = file_field.filename
+    #         # 获取文件名
+    #         if not file_name.endswith('.torrent'):
+    #             return web.json_response({'code': 500, 'msg': 'Invalid file format. Only.torrent files are allowed.'},
+    #                                      headers={'Access-Control-Allow-Origin': '*'}, status=500)
+    #
+    #         file_path = os.path.join(config.upload_folder, file_name)
+    #         # 备份文件
+    #         if config.is_backup_torrent:
+    #             with open(file_path, 'wb') as f:
+    #                 contents = file_field.file.read()
+    #                 f.write(contents)
+    #
+    #         with open(file_path, 'rb') as f:
+    #             try:
+    #                 torrent_bytes = f.read()
+    #                 torrent_bytesio = base64.b64encode(torrent_bytes).decode('utf-8')
+    #
+    #                 current_torrent = Torrent(None, torrent_bytesio, self.qb_torrents_info, encode_base64=True)
+    #                 if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) and not forceadd:
+    #                     return web.json_response({"code": 500,
+    #                                               "msg": 'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.',
+    #                                               "data": "ADDTORRENT"}
+    #                                              , headers={'Access-Control-Allow-Origin': '*'},status=500)
+    #                 if current_torrent.is_in_client:
+    #                     return web.json_response(
+    #                         {'code': 500, 'msg': 'Torrent Already in qBittorrent.', 'data': 'ADDTORRENT'}
+    #                         , headers={'Access-Control-Allow-Origin': '*'},status=500)
+    #                 table_name = f"torrent_{current_torrent.md5}"
+    #
+    #                 # Check if the torrent is already in the queue
+    #                 self.cursor.execute(
+    #                     "SELECT count(*) FROM deployment_torrents_queue WHERE torrent_name = ? AND torrent_md5 = ?",
+    #                     (current_torrent.name, current_torrent.md5)
+    #                 )
+    #                 result = self.cursor.fetchone()[0]
+    #
+    #                 if result > 1:
+    #                     raise ValueError(
+    #                         f"Unexpected Database Error: Multiple records found for this torrent. Count: {result}")
+    #
+    #                 if result == 0:
+    #                     # Insert into deployment_torrents_queue and create the table
+    #                     self.cursor.execute(
+    #                         "INSERT INTO deployment_torrents_queue (torrent_name, torrent_md5, isavailable) VALUES (?, ?, ?)",
+    #                         (current_torrent.name, current_torrent.md5, False)
+    #                     )
+    #
+    #                     self.cursor.execute(f"""
+    #                         CREATE TABLE IF NOT EXISTS {table_name} (
+    #                             id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #                             torrent_hash TEXT NOT NULL,
+    #                             torrent_byteio BLOB NOT NULL,
+    #                             torrent_tracker TEXT NOT NULL,
+    #                             ispushed BOOLEAN NOT NULL DEFAULT 0,
+    #                             fifoid INTEGER NOT NULL
+    #                         )
+    #                     """)
+    #                     is_new_torrent = True
+    #                 else:
+    #                     # Check if the torrent data is already in the specific table
+    #                     self.cursor.execute(
+    #                         f"SELECT count(*) FROM {table_name} WHERE torrent_hash = ?",
+    #                         (current_torrent.hash,)
+    #                     )
+    #                     is_new_torrent = self.cursor.fetchone()[0] == 0
+    #
+    #                 if is_new_torrent:
+    #                     self.cursor.execute("SELECT fifo_max FROM daemon_config WHERE id = 1 LIMIT 1")
+    #                     result = self.cursor.fetchone()
+    #                     if result:
+    #                         thisfifoid = result[0] + 1  # 自增1
+    #
+    #                         self.cursor.execute(
+    #                             "UPDATE daemon_config SET fifo_max = ? WHERE fifo_max = ? and id = 1",
+    #                             (thisfifoid, result[0]))
+    #                     else:
+    #                         thisfifoid = 1  # 如果没有找到记录，默认从1开始
+    #
+    #                     self.cursor.execute(
+    #                         f"INSERT INTO {table_name} (torrent_hash, torrent_byteio, torrent_tracker, ispushed, fifoid) VALUES (?, ?, ?, ?, ?)",
+    #                         (current_torrent.hash, current_torrent.torrent, current_torrent.announce, False,
+    #                          thisfifoid)
+    #                     )
+    #
+    #                     self.conn.commit()
+    #                     return web.json_response({'code': 200, 'msg': '成功', 'data': {
+    #                         'action': 'ADDTORRENT',
+    #                         'torrent_name': current_torrent.name,
+    #                         'tracker': current_torrent.announce
+    #                     }}, headers={'Access-Control-Allow-Origin': '*'})
+    #                 else:
+    #                     return web.json_response({'code': 500, 'msg': 'Torrent Already in Queue.', 'data': {
+    #                         'action': 'ADDTORRENT',
+    #                         'torrent_name': current_torrent.name,
+    #                         'tracker': current_torrent.announce,
+    #                     }}, headers={'Access-Control-Allow-Origin': '*'},status=500)
+    #
+    #             except Exception as e:
+    #                 logging.error(f"Error adding torrent: {str(e)}")
+    #                 return web.json_response({'code': 500, 'msg': str(e), 'data': ''},
+    #                                          headers={'Access-Control-Allow-Origin': '*'},status=500)
 
     async def login(self, request):
         data = await request.json()
