@@ -504,7 +504,7 @@ class TorrentManager:
         # 获取表单数据
         form = await request.post()
         authorization = form.get('Authorization')
-        isForce = form.get('isForce')
+        forceadd = (form.get('forceadd') == 'true')
         isDonwnload = form.get('isDownload')
 
         file_field = form.get('file')
@@ -529,7 +529,7 @@ class TorrentManager:
                     torrent_bytesio = base64.b64encode(torrent_bytes).decode('utf-8')
 
                     current_torrent = Torrent(None, torrent_bytesio, self.qb_torrents_info, encode_base64=True)
-                    if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) :
+                    if not self.qb_torrents_info["torrents_name2hash"].get(current_torrent.name) and not forceadd:
                         return web.json_response({"code": 500,
                                                   "msg": 'Provided cross-seed torrent does not exist in qBittorrent. Use "forceadd" to skip this check.',
                                                   "data": "ADDTORRENT"}
