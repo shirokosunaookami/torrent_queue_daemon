@@ -48,7 +48,7 @@ class TorrentManager:
         self.v2_last_ft_time = time.time()
 
         # Initialize SQLite database for deployment queue
-        self.conn = sqlite3.connect('torrent_manager.db')
+        self.conn = sqlite3.connect('../torrent_manager.db')
         # self.conn = sqlite3.connect('torrent_manager_2.db.db')
 
         self.cursor = self.conn.cursor()
@@ -938,7 +938,7 @@ async def main():
 
     # Start the tasks with error handling
     fetch_torrents_info_task = asyncio.create_task(safe_task(torrent_manager.fetch_torrents_info()))
-    torrent_manager_task = asyncio.create_task(safe_task(torrent_manager.torrent_manager()))
+    # torrent_manager_task = asyncio.create_task(safe_task(torrent_manager.torrent_manager()))
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -946,7 +946,7 @@ async def main():
     await site.start()
 
     # Use asyncio.gather to run the tasks concurrently
-    await asyncio.gather(fetch_torrents_info_task, torrent_manager_task)
-    # await asyncio.gather(fetch_torrents_info_task)
+    # await asyncio.gather(fetch_torrents_info_task, torrent_manager_task)
+    await asyncio.gather(fetch_torrents_info_task)
 
 asyncio.run(main())
