@@ -48,8 +48,7 @@ class TorrentManager:
         self.v2_last_ft_time = time.time()
 
         # Initialize SQLite database for deployment queue
-        self.conn = sqlite3.connect('../torrent_manager.db')
-        # self.conn = sqlite3.connect('torrent_manager_2.db.db')
+        self.conn = sqlite3.connect('torrent_manager.db')
 
         self.cursor = self.conn.cursor()
         self.init_db()
@@ -870,6 +869,17 @@ class TorrentManager:
             "code": 200,
             "msg": "修改种子优先级成功"
         }, headers={'Access-Control-Allow-Origin': '*'})
+    def delMD5(self, torrent_md5):
+        table_name = f"torrent_{torrent_md5}"
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not self.cursor.fetchone():
+            logging.info(f"{torrent_md5} does not in Queue. Skipping.")
+        else:
+            self.cursor.execute(f"DROP TABLE {table_name}")
+
+        delete_query = "DELETE FROM deployment_torrents_queue WHERE torrent_md5 = ?"
+        self.cursor.execute(delete_query, (torrent_md5,))
+        self.conn.commit()
 
     async def del_torrent(self, request):
         try:
@@ -878,6 +888,7 @@ class TorrentManager:
             torrent_bytesio = data.get('torrent_bytesio')
             torrent_name = data.get('torrent_name')
             torrent_hash = data.get('torrent_hash')
+            torrent_md5 = data.get('torrent_md5')
 
             if config.api_key:
                 received_uuid = data.get('uuid')
@@ -896,21 +907,33 @@ class TorrentManager:
 
                     # 假设允许的时间差为60秒（1分钟）
                     if abs(current_timestamp - request_timestamp) >= 60:
-                        web.json_response({'code': 500, 'msg': 'Outdated Signature', 'data': ''} ,
+                        return web.json_response({'code': 500, 'msg': 'Outdated Signature', 'data': ''} ,
                                           headers={'Access-Control-Allow-Origin': '*'})
-                        return
                 else:
-                    web.json_response({'code': 500, 'msg': 'Outdated Signature', 'data': ''} ,
+                    return web.json_response({'code': 500, 'msg': 'Outdated Signature', 'data': ''} ,
                                       headers={'Access-Control-Allow-Origin': '*'})
         except Exception as e:
             logging.error(f"del_torrent Internal server error: {e}")
             return web.json_response({'code': 500, 'msg': 'Please Contract Administrator', 'data': ''} ,
                                      headers={'Access-Control-Allow-Origin': '*'})
         try:
-            if not any([torrent_link, torrent_bytesio, torrent_name, torrent_hash]):
+            if not any([torrent_link, torrent_bytesio, torrent_name, torrent_hash, torrent_md5]):
                 return web.json_response({'code': 500, 'msg': 'No option provided, Bad Request', 'data': 'DELTORRENT'} ,
                     headers={'Access-Control-Allow-Origin': '*'})
-            torrent_hash = None
+            if torrent_hash and torrent_md5:
+                table_name = f"torrent_{torrent_md5}"
+                delete_query = f"DELETE FROM {table_name} WHERE torrent_hash = ?"
+                self.cursor.execute(delete_query, (torrent_hash,))
+                # 删除完后如果表为空则删除表
+                self.cursor.execute(f"SELECT 1 FROM {table_name} ")
+                if not self.cursor.fetchone():
+                    self.delMD5(torrent_md5)
+                self.conn.commit()
+            elif torrent_name and torrent_md5:
+                torrent_hash = self.qb_torrents_info["torrents_name2hash"].get(torrent_name)
+                self.delMD5(torrent_md5)
+
+            # torrent_hash = None
             # if torrent_link or torrent_bytesio:
             #     current_torrent = Torrent(torrent_link=torrent_link, torrent_bytesio=torrent_bytesio,
             #                               qb_torrents_info=self.qb_torrents_info, encode_base64=True)
@@ -963,7 +986,9 @@ class TorrentManager:
             logging.error(f"Error deleting torrent: {str(e)}")
             return web.json_response({'code': 500, 'msg': str(e), 'data': 'DELTORRENT'} ,
                                      headers={'Access-Control-Allow-Origin': '*'})
-
+        return web.json_response(
+            {'code': 200, 'msg': '删除种子成功', 'data': 'DELTORRENT'},
+            headers={'Access-Control-Allow-Origin': '*'})
 
 class Torrent:
     def __init__(self, torrent_link=None, torrent_bytesio=None, qb_torrents_info=None, encode_base64=False):
